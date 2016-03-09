@@ -19,7 +19,7 @@ def present(name, value, delimiter=DEFAULT_TARGET_DELIM, force=False):
     '''
     Ensure that a grain is set
 
-    .. versionchanged:: Boron
+    .. versionchanged:: 2016.3.0
 
     name
         The grain name
@@ -30,11 +30,11 @@ def present(name, value, delimiter=DEFAULT_TARGET_DELIM, force=False):
     :param force: If force is True, the existing grain will be overwritten
         regardless of its existing or provided value type. Defaults to False
 
-        .. versionadded:: Boron
+        .. versionadded:: 2016.3.0
 
     :param delimiter: A delimiter different from the default can be provided.
 
-        .. versionadded:: Boron
+        .. versionadded:: 2016.3.0
 
     It is now capable to set a grain to a complex value (ie. lists and dicts)
     and supports nested grains as well.
@@ -108,7 +108,7 @@ def list_present(name, value, delimiter=DEFAULT_TARGET_DELIM):
 
     :param delimiter: A delimiter different from the default ``:`` can be provided.
 
-        .. versionadded:: Boron
+        .. versionadded:: 2016.3.0
 
     The grain should be `list type <http://docs.python.org/2/tutorial/datastructures.html#data-structures>`_
 
@@ -128,14 +128,12 @@ def list_present(name, value, delimiter=DEFAULT_TARGET_DELIM):
               - web
               - dev
     '''
-
     name = re.sub(delimiter, DEFAULT_TARGET_DELIM, name)
     ret = {'name': name,
            'changes': {},
            'result': True,
            'comment': ''}
     grain = __salt__['grains.get'](name)
-
     if grain:
         # check whether grain is a list
         if not isinstance(grain, list):
@@ -146,6 +144,17 @@ def list_present(name, value, delimiter=DEFAULT_TARGET_DELIM):
             if set(value).issubset(set(__salt__['grains.get'](name))):
                 ret['comment'] = 'Value {1} is already in grain {0}'.format(name, value)
                 return ret
+            elif name in __context__.get('pending_grains', {}):
+                # elements common to both
+                intersection = set(value).intersection(__context__.get('pending_grains', {})[name])
+                if intersection:
+                    value = list(set(value).difference(__context__['pending_grains'][name]))
+                    ret['comment'] = 'Removed value {0} from update due to context found in "{1}".\n'.format(value, name)
+            if 'pending_grains' not in __context__:
+                __context__['pending_grains'] = {}
+            if name not in __context__['pending_grains']:
+                __context__['pending_grains'][name] = set()
+            __context__['pending_grains'][name].update(value)
         else:
             if value in grain:
                 ret['comment'] = 'Value {1} is already in grain {0}'.format(name, value)
@@ -191,7 +200,7 @@ def list_absent(name, value, delimiter=DEFAULT_TARGET_DELIM):
 
     :param delimiter: A delimiter different from the default ``:`` can be provided.
 
-        .. versionadded:: Boron
+        .. versionadded:: 2016.3.0
 
     The grain should be `list type <http://docs.python.org/2/tutorial/datastructures.html#data-structures>`_
 
@@ -261,13 +270,13 @@ def absent(name,
     :param force: If force is True, the existing grain will be overwritten
         regardless of its existing or provided value type. Defaults to False
 
-        .. versionadded:: Boron
+        .. versionadded:: 2016.3.0
 
     :param delimiter: A delimiter different from the default can be provided.
 
-        .. versionadded:: Boron
+        .. versionadded:: 2016.3.0
 
-    .. versionchanged:: Boron
+    .. versionchanged:: 2016.3.0
     This state now support nested grains and complex values. It is also more
     conservative: if a grain has a value that is a list or a dict, it will
     not be removed unless the `force` parameter is True.
@@ -355,7 +364,7 @@ def append(name, value, convert=False,
 
     :param delimiter: A delimiter different from the default can be provided.
 
-        .. versionadded:: Boron
+        .. versionadded:: 2016.3.0
 
     .. code-block:: yaml
 

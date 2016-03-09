@@ -3,7 +3,7 @@
 Vultr Cloud Module using python-vultr bindings
 ==============================================
 
-.. versionadded:: Boron
+.. versionadded:: 2016.3.0
 
 The Vultr cloud module is used to control access to the Vultr VPS system.
 
@@ -110,7 +110,7 @@ def list_nodes_full(**kwargs):
         ret[name]['image'] = nodes[node]['os']
         ret[name]['size'] = nodes[node]['VPSPLANID']
         ret[name]['state'] = nodes[node]['status']
-        ret[name]['private_ips'] = []
+        ret[name]['private_ips'] = nodes[node]['internal_ip']
         ret[name]['public_ips'] = nodes[node]['main_ip']
 
     return ret

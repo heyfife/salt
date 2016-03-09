@@ -445,6 +445,15 @@ class Master(SMaster):
         if not self.opts['fileserver_backend']:
             errors.append('No fileserver backends are configured')
 
+        # Check to see if we need to create a pillar cache dir
+        if self.opts['pillar_cache'] and not os.path.isdir(os.path.join(self.opts['cachedir'], 'pillar_cache')):
+            try:
+                prev_umask = os.umask(0o077)
+                os.mkdir(os.path.join(self.opts['cachedir'], 'pillar_cache'))
+                os.umask(prev_umask)
+            except OSError:
+                pass
+
         non_legacy_git_pillars = [
             x for x in self.opts.get('ext_pillar', [])
             if 'git' in x
@@ -508,7 +517,7 @@ class Master(SMaster):
             # Setup the secrets here because the PubServerChannel may need
             # them as well.
             SMaster.secrets['aes'] = {'secret': multiprocessing.Array(ctypes.c_char,
-                                                salt.crypt.Crypticle.generate_key_string()),
+                                                salt.crypt.Crypticle.generate_key_string().encode('ascii')),
                                       'reload': salt.crypt.Crypticle.generate_key_string
                                      }
             log.info('Creating master process manager')
@@ -984,7 +993,7 @@ class AESFuncs(object):
         if not self.__verify_minion(clear_load['id'], clear_load['tok']):
             # The minion is not who it says it is!
             # We don't want to listen to it!
-            log.warn(
+            log.warning(
                 (
                     'Minion id {0} is not who it says it is and is attempting '
                     'to issue a peer command'
@@ -1042,7 +1051,7 @@ class AESFuncs(object):
         if not self.__verify_minion(load['id'], load['tok']):
             # The minion is not who it says it is!
             # We don't want to listen to it!
-            log.warn(
+            log.warning(
                 'Minion id {0} is not who it says it is!'.format(
                     load['id']
                 )
@@ -1194,7 +1203,7 @@ class AESFuncs(object):
         if not self.__verify_minion(load['id'], load['tok']):
             # The minion is not who it says it is!
             # We don't want to listen to it!
-            log.warn(
+            log.warning(
                 'Minion id {0} is not who it says it is!'.format(
                     load['id']
                 )
@@ -1245,7 +1254,8 @@ class AESFuncs(object):
         load['grains']['id'] = load['id']
 
         pillar_dirs = {}
-        pillar = salt.pillar.Pillar(
+#        pillar = salt.pillar.Pillar(
+        pillar = salt.pillar.get_pillar(
             self.opts,
             load['grains'],
             load['id'],

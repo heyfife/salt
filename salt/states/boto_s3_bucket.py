@@ -3,7 +3,7 @@
 Manage S3 Buckets
 =================
 
-.. versionadded:: Boron
+.. versionadded:: 2016.3.0
 
 Create and destroy S3 buckets. Be aware that this interacts with Amazon's services,
 and so may incur charges.
@@ -554,7 +554,7 @@ def present(name, Bucket,
     # notice something mismatches their desired state.
     if _describe.get('Location', {}).get('LocationConstraint') != LocationConstraint:
         msg = 'Bucket {0} location does not match desired configuration, but cannot be changed'.format(LocationConstraint)
-        log.warn(msg)
+        log.warning(msg)
         ret['result'] = False
         ret['comment'] = 'Failed to update bucket: {0}.'.format(msg)
         return ret

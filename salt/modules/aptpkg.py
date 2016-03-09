@@ -879,7 +879,8 @@ def purge(name=None, pkgs=None, **kwargs):
 
 def upgrade(refresh=True, dist_upgrade=False, **kwargs):
     '''
-    Upgrades all packages via ``apt-get dist-upgrade``
+    Upgrades all packages via ``apt-get upgrade`` or ``apt-get dist-upgrade``
+    if  ``dist_upgrade`` is ``True``.
 
     Returns a dict containing the changes::
 
@@ -1690,7 +1691,7 @@ def mod_repo(repo, saltenv='base', **kwargs):
             if ``True``, will attempt to de-dup and consolidate sources
 
         .. note:: Due to the way keys are stored for APT, there is a known issue
-                where the key wont be updated unless another change is made
+                where the key won't be updated unless another change is made
                 at the same time.  Keys should be properly added on initial
                 configuration.
 
@@ -2280,7 +2281,12 @@ def owner(*paths):
 
 def info_installed(*names):
     '''
-    Return the information of the named package(s), installed on the system.
+    Return the information of the named package(s) installed on the system.
+
+    .. versionadded:: 2015.8.1
+
+    names
+        The names of the packages for which to return information.
 
     CLI example:
 

@@ -266,10 +266,10 @@ def parse_args_and_kwargs(func, args, data=None):
     Wrap load_args_and_kwargs
     '''
     salt.utils.warn_until(
-        'Boron',
+        'Carbon',
         'salt.minion.parse_args_and_kwargs() has been renamed to '
         'salt.minion.load_args_and_kwargs(). Please change this function call '
-        'before the Boron release of Salt.'
+        'before the Carbon release of Salt.'
     )
     return load_args_and_kwargs(func, args, data=data)
 
@@ -294,7 +294,7 @@ def load_args_and_kwargs(func, args, data=None, ignore_invalid=False):
                 _args.append(arg)
             elif string_kwarg:
                 salt.utils.warn_until(
-                    'Boron',
+                    'Carbon',
                     'The list of function args and kwargs should be parsed '
                     'by salt.utils.args.parse_input() before calling '
                     'salt.minion.load_args_and_kwargs().'
@@ -422,6 +422,7 @@ class MinionBase(object):
                              ' {0}'.format(opts['master']))
                     if opts['master_shuffle']:
                         shuffle(opts['master'])
+                    opts['auth_tries'] = 0
                 # if opts['master'] is a str and we have never created opts['master_list']
                 elif isinstance(opts['master'], str) and ('master_list' not in opts):
                     # We have a string, but a list was what was intended. Convert.
@@ -530,7 +531,12 @@ class SMinion(MinionBase):
         # Clean out the proc directory (default /var/cache/salt/minion/proc)
         if (self.opts.get('file_client', 'remote') == 'remote'
                 or self.opts.get('use_master_when_local', False)):
-            self.eval_master(self.opts, failed=True)
+            if HAS_ZMQ:
+                zmq.eventloop.ioloop.install()
+            io_loop = LOOP_CLASS()
+            io_loop.run_sync(
+                lambda: self.eval_master(self.opts, failed=True)
+            )
         self.gen_modules(initial_load=True)
 
         # If configured, cache pillar data on the minion
@@ -850,7 +856,7 @@ class Minion(MinionBase):
         '''
         self.opts['master'] = master
 
-        self.functions, self.returners, self.function_errors, self.executors = self._load_modules()
+        # Initialize pillar before loader to make pillar accessible in modules
         self.opts['pillar'] = yield salt.pillar.get_async_pillar(
             self.opts,
             self.opts['grains'],
@@ -858,6 +864,7 @@ class Minion(MinionBase):
             self.opts['environment'],
             pillarenv=self.opts.get('pillarenv')
         ).compile_pillar()
+        self.functions, self.returners, self.function_errors, self.executors = self._load_modules()
         self.serial = salt.payload.Serial(self.opts)
         self.mod_opts = self._prep_mod_opts()
         self.matcher = Matcher(self.opts, self.functions)
@@ -1169,6 +1176,13 @@ class Minion(MinionBase):
         function_name = data['fun']
         if function_name in minion_instance.functions:
             try:
+                if minion_instance.opts['pillar'].get('minion_blackout', False):
+                    # this minion is blacked out. Only allow saltutil.refresh_pillar
+                    if function_name != 'saltutil.refresh_pillar' and \
+                            function_name not in minion_instance.opts['pillar'].get('minion_blackout_whitelist', []):
+                        raise SaltInvocationError('Minion in blackout mode. Set \'minion_blackout\' '
+                                                 'to False in pillar to resume operations. Only '
+                                                 'saltutil.refresh_pillar allowed in blackout mode.')
                 func = minion_instance.functions[function_name]
                 args, kwargs = load_args_and_kwargs(
                     func,
@@ -1333,6 +1347,13 @@ class Minion(MinionBase):
         for ind in range(0, len(data['fun'])):
             ret['success'][data['fun'][ind]] = False
             try:
+                if minion_instance.opts['pillar'].get('minion_blackout', False):
+                    # this minion is blacked out. Only allow saltutil.refresh_pillar
+                    if data['fun'][ind] != 'saltutil.refresh_pillar' and \
+                            data['fun'][ind] not in minion_instance.opts['pillar'].get('minion_blackout_whitelist', []):
+                        raise SaltInvocationError('Minion in blackout mode. Set \'minion_blackout\' '
+                                                 'to False in pillar to resume operations. Only '
+                                                 'saltutil.refresh_pillar allowed in blackout mode.')
                 func = minion_instance.functions[data['fun'][ind]]
                 args, kwargs = load_args_and_kwargs(
                     func,
@@ -1446,7 +1467,7 @@ class Minion(MinionBase):
                    '{0}. This is often due to the master being shut down or '
                    'overloaded. If the master is running consider increasing '
                    'the worker_threads value.').format(jid)
-            log.warn(msg)
+            log.warning(msg)
             return ''
 
         log.trace('ret_val = {0}'.format(ret_val))  # pylint: disable=no-member
@@ -2558,26 +2579,28 @@ class Matcher(object):
         '''
         Matches based on IP address or CIDR notation
         '''
-
         try:
-            tgt = ipaddress.ip_network(tgt)
-            # Target is a network
-            proto = 'ipv{0}'.format(tgt.version)
-            if proto not in self.opts['grains']:
-                return False
-            else:
-                return salt.utils.network.in_subnet(tgt, self.opts['grains'][proto])
+            # Target is an address?
+            tgt = ipaddress.ip_address(tgt)
         except:  # pylint: disable=bare-except
             try:
-                # Target should be an address
-                proto = 'ipv{0}'.format(ipaddress.ip_address(tgt).version)
-                if proto not in self.opts['grains']:
-                    return False
-                else:
-                    return tgt in self.opts['grains'][proto]
+                # Target is a network?
+                tgt = ipaddress.ip_network(tgt)
             except:  # pylint: disable=bare-except
-                log.error('Invalid IP/CIDR target {0}"'.format(tgt))
-                return False
+                log.error('Invalid IP/CIDR target: {0}'.format(tgt))
+                return []
+        proto = 'ipv{0}'.format(tgt.version)
+
+        grains = self.opts['grains']
+
+        if proto not in grains:
+            match = False
+        elif isinstance(tgt, (ipaddress.IPv4Address, ipaddress.IPv6Address)):
+            match = str(tgt) in grains[proto]
+        else:
+            match = salt.utils.network.in_subnet(tgt, grains[proto])
+
+        return match
 
     def range_match(self, tgt):
         '''
@@ -2761,7 +2784,7 @@ class ProxyMinion(Minion):
         # functions here, and then force a grains sync in modules_refresh
         self.opts['grains'] = salt.loader.grains(self.opts, force_refresh=True)
 
-        # Check config 'add_proxymodule_to_opts'  Remove this in Boron.
+        # Check config 'add_proxymodule_to_opts'  Remove this in Carbon.
         if self.opts['add_proxymodule_to_opts']:
             self.opts['proxymodule'] = self.proxy
 

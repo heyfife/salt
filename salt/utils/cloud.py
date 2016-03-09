@@ -2403,7 +2403,7 @@ def lock_file(filename, interval=.5, timeout=15):
     while True:
         if os.path.exists(lock):
             if time.time() - start >= timeout:
-                log.warn('Unable to obtain lock for {0}'.format(filename))
+                log.warning('Unable to obtain lock for {0}'.format(filename))
                 return False
             time.sleep(interval)
         else:
@@ -3113,7 +3113,7 @@ def check_key_path_and_mode(provider, key_path):
 
     Returns True or False.
 
-    .. versionadded:: Boron
+    .. versionadded:: 2016.3.0
 
     provider
         The provider name that the key_path to check belongs to.
